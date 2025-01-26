@@ -1,57 +1,149 @@
 package main
 
 import (
+	"encoding/json"
+	"errors"
 	"fmt"
 	"math/rand/v2"
+	"os"
+	"time"
 )
 
+type Stats struct {
+	Games []Game
+}
+
+type Game struct {
+	Playerhand Hand
+	Dealerhand Hand
+	WonFlag    int
+}
+
 type Hand struct {
-	cards []Card
+	Cards []Card
 }
 
 type Card struct {
-	name    string
-	value   int
-	cardval int
+	Name    string
+	Suit    string
+	Rank    string
+	Value   int //SPLIT INTO RANK AND SUIT VALUES??? MODIFY createCard()???
+	Cardval int
 }
 
 var (
-	suits []string       = []string{"hearts", "diamonds", "spades", "clubs"}
+	suits []string       = []string{"♥", "♦", "♠", "♣"}
 	ranks map[int]string = map[int]string{
-		1:  "Ace",
-		2:  "Two",
-		3:  "Three",
-		4:  "Four",
-		5:  "Five",
-		6:  "Six",
-		7:  "Seven",
-		8:  "Eight",
-		9:  "Nine",
-		10: "Jack",
-		11: "Queen",
-		12: "King",
+		1:  "A",
+		2:  "2",
+		3:  "3",
+		4:  "4",
+		5:  "5",
+		6:  "6",
+		7:  "7",
+		8:  "8",
+		9:  "9",
+		10: "10",
+		11: "J",
+		12: "Q",
+		13: "K",
 	}
+	valuestore []int
 )
 
 func main() {
-	valuestore := []int{}
-	round(valuestore)
+	play := false
+	for !play {
+		fmt.Println("\nPLAY (1)  QUIT(2)  SEE STATS(3)")
+		valuestore = []int{}
+		var input int
+		fmt.Scanln(&input)
+
+		for input != 1 && input != 2 && input != 3 {
+			fmt.Scanln(&input)
+		}
+
+		if input == 1 {
+			round()
+		} else if input == 2 {
+			play = true
+		} else if input == 3 {
+			displayStats()
+		}
+	}
+}
+
+func displayStats() {
+	stats := readStats()
+	wins := 0
+	losses := 0
+	draws := 0
+
+	for _, game := range stats.Games {
+		if game.WonFlag == 1 {
+			wins++
+		} else if game.WonFlag == 2 {
+			losses++
+		} else if game.WonFlag == 3 {
+			draws++
+		}
+	}
+
+	fmt.Println("\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\nS T A T S")
+	fmt.Println("Games played:", len(stats.Games))
+	fmt.Println("Won:         ", wins)
+	fmt.Println("Lost:        ", losses)
+
+	if wins != 0 {
+		fmt.Printf("Win %%:        %.2f%%\n", float64(wins)/float64(len(stats.Games))*100)
+	} else {
+		fmt.Println("Win %:        0%")
+	}
+}
+
+func readStats() (stats Stats) {
+	if _, err := os.Stat("stats.txt"); errors.Is(err, os.ErrNotExist) {
+		fmt.Println("No save file.")
+	} else {
+		file, err := os.ReadFile("stats.txt")
+		if err != nil {
+			panic(err)
+		}
+		err = json.Unmarshal(file, &stats)
+		if err != nil {
+			panic(err)
+		}
+	}
+	return stats
+}
+
+func saveStats(stats Stats) {
+	json, err := json.Marshal(stats)
+	if err != nil {
+		panic(err)
+	}
+	f, err := os.Create("stats.txt")
+	if err != nil {
+		panic(err)
+	}
+	f.Write(json)
 }
 
 func randRange(min, max int) int {
 	return rand.IntN(max-min) + min
 }
 
-func round(valuestore []int) {
+func round() {
 	//deal a random card to user, then dealer, then user, then dealer.
 	//pick random number
 	//repeat 3 other times without repeat numbers.
-	player, dealer, valuestore := deal(valuestore)
+	game := Game{}
+	endgame := false
+	standoff := false
+	player, dealer := deal()
 	//reveal the second card dealt to the dealer.
 
-	win := true
-
-	for getHandval(player) < 21 && getHandval(dealer) < 21 {
+	for !endgame && !standoff {
 		displayHands(player, dealer)
 		fmt.Println("Hit(1) or Stand(2)?")
 		var input int
@@ -62,34 +154,77 @@ func round(valuestore []int) {
 		}
 
 		if input == 1 {
-			//hit
-			fmt.Println("Hit.")
-			card, _ := createCard(valuestore)
-			player.cards = append(player.cards, card)
+			fmt.Println("hit.")
+			card := createCard()
+			player.Cards = append(player.Cards, card)
+			if getHandval(player) >= 21 {
+				endgame = true
+			}
 		} else {
-			fmt.Println("Stand.")
-			//stand
-			for getHandval(dealer) < 21 {
-				card, _ := createCard(valuestore)
-				dealer.cards = append(dealer.cards, card)
-				if getHandval(dealer) > getHandval(player) || getHandval(dealer) == 21 {
-					fmt.Println("Dealer wins.")
-					displayHands(player, dealer)
-					win = false
-					break
-				}
-			}
-			if !win {
-
-			} else {
-				fmt.Println("You win.")
-				break
-			}
+			fmt.Println("stand.")
+			standoff = true
 		}
 	}
-	if !win {
-		fmt.Println("Dealer wins.")
+
+	if standoff {
+		//deal card to dealer unti he gets a higher cardval than player, or until he draws 21 or over.
+		for !endgame {
+			card := createCard()
+			dealer.Cards = append(dealer.Cards, card)
+			displayHands(player, dealer)
+			time.Sleep(2 * time.Second)
+			if getHandval(dealer) < 21 {
+				if getHandval(dealer) > getHandval(player) {
+					endgame = true
+					fmt.Println("1Dealer wins.")
+					game.WonFlag = 2
+				}
+			} else if getHandval(dealer) > 21 {
+				endgame = true
+				fmt.Println("You win.")
+				game.WonFlag = 1
+			} else {
+				if getHandval(dealer) == 21 {
+					endgame = true
+					if getHandval(player) == 21 {
+						fmt.Println("Draw.")
+						game.WonFlag = 3
+					} else {
+						fmt.Println("Dealer wins.")
+						game.WonFlag = 2
+					}
+				}
+			}
+		}
+	} else {
+		if getHandval(player) == 21 {
+			//check if dealer gets 21. otherwise, you win.
+			for getHandval(dealer) < 21 {
+				card := createCard()
+				dealer.Cards = append(dealer.Cards, card)
+				displayHands(player, dealer)
+			}
+			if getHandval(dealer) == 21 {
+				//tie.
+				fmt.Println("2Draw.")
+				game.WonFlag = 3
+			} else {
+				displayHands(player, dealer)
+				fmt.Println("You win!")
+				game.WonFlag = 1
+			}
+		} else {
+			displayHands(player, dealer)
+			fmt.Println("3Dealer wins")
+			game.WonFlag = 2
+		}
+
 	}
+	game.Playerhand = player
+	game.Dealerhand = dealer
+	stats := readStats()
+	stats.Games = append(stats.Games, game)
+	saveStats(stats)
 	//give option to hit or stay.
 	//if you go over 21, you lose.
 	//if dealer goes over 21 they lose.
@@ -97,82 +232,203 @@ func round(valuestore []int) {
 }
 
 func displayHands(player Hand, dealer Hand) {
-	if len(dealer.cards) < 3 {
-		fmt.Println("Your hand: ")
-		for _, card := range player.cards {
-			fmt.Println(card.name)
+	if len(dealer.Cards) < 3 {
+		fmt.Println("\n\n\n\n\n\n\n\n     D E A L E R ")
+		for _ = range dealer.Cards {
+			fmt.Print(" ---------  ")
 		}
-		fmt.Println(getHandval(player))
-		fmt.Println("Dealer: ")
-		fmt.Println(dealer.cards[1].name)
-		fmt.Println(getHandval(dealer))
+		fmt.Println()
+		for i, card := range dealer.Cards {
+			if i < 1 {
+				fmt.Printf("| %-8s| ", "?")
+			} else {
+				fmt.Printf("| %-8s| ", card.Rank)
+			}
+		}
+		fmt.Println()
+		for _ = range dealer.Cards {
+			fmt.Print("|         | ")
+		}
+		fmt.Println()
+		for i, card := range dealer.Cards {
+			if i < 1 {
+				fmt.Printf("|    %-2s   | ", "?")
+			} else {
+				fmt.Printf("|    %-2s   | ", card.Suit)
+			}
+		}
+		fmt.Println()
+		for _ = range dealer.Cards {
+			fmt.Print("|         | ")
+		}
+		fmt.Println()
+		for i, card := range dealer.Cards {
+			if i < 1 {
+				fmt.Printf("|       %-2s| ", "?")
+			} else {
+				fmt.Printf("|       %-2s| ", card.Rank)
+			}
+		}
+		fmt.Println()
+		for _ = range dealer.Cards {
+			fmt.Print(" ---------  ")
+		}
+		fmt.Println()
+		fmt.Println("     Y O U R  H A N D ")
+		for _ = range player.Cards {
+			fmt.Print(" ---------  ")
+		}
+		fmt.Println()
+		for _, card := range player.Cards {
+			fmt.Printf("| %-8s| ", card.Rank)
+		}
+		fmt.Println()
+		for _ = range player.Cards {
+			fmt.Print("|         | ")
+		}
+		fmt.Println()
+		for _, card := range player.Cards {
+			fmt.Printf("|    %-2s   | ", card.Suit)
+		}
+		fmt.Println()
+		for _ = range player.Cards {
+			fmt.Print("|         | ")
+		}
+		fmt.Println()
+		for _, card := range player.Cards {
+			fmt.Printf("|       %-2s| ", card.Rank)
+		}
+		fmt.Println()
+		for _ = range player.Cards {
+			fmt.Print(" ---------  ")
+		}
+		fmt.Println()
+
 	} else {
-		fmt.Println("Your hand: ")
-		for _, card := range player.cards {
-			fmt.Println(card.name)
+		fmt.Println("\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n     D E A L E R ")
+		for _ = range dealer.Cards {
+			fmt.Print(" ---------  ")
 		}
-		fmt.Println(getHandval(player))
-		fmt.Println("Dealer: ")
-		for _, card := range dealer.cards {
-			fmt.Println(card.name)
+		fmt.Println()
+		for _, card := range dealer.Cards {
+			fmt.Printf("| %-8s| ", card.Rank)
 		}
-		fmt.Println(getHandval(dealer))
+		fmt.Println()
+		for _ = range dealer.Cards {
+			fmt.Print("|         | ")
+		}
+		fmt.Println()
+		for _, card := range dealer.Cards {
+			fmt.Printf("|    %-2s   | ", card.Suit)
+		}
+		fmt.Println()
+		for _ = range dealer.Cards {
+			fmt.Print("|         | ")
+		}
+		fmt.Println()
+		for _, card := range dealer.Cards {
+			fmt.Printf("|       %-2s| ", card.Rank)
+		}
+		fmt.Println()
+		for _ = range dealer.Cards {
+			fmt.Print(" ---------  ")
+		}
+		fmt.Println()
+		fmt.Println("     Y O U R  H A N D ")
+		for _ = range player.Cards {
+			fmt.Print(" ---------  ")
+		}
+		fmt.Println()
+		for _, card := range player.Cards {
+			fmt.Printf("| %-8s| ", card.Rank)
+		}
+		fmt.Println()
+		for _ = range player.Cards {
+			fmt.Print("|         | ")
+		}
+		fmt.Println()
+		for _, card := range player.Cards {
+			fmt.Printf("|    %-2s   | ", card.Suit)
+		}
+		fmt.Println()
+		for _ = range player.Cards {
+			fmt.Print("|         | ")
+		}
+		fmt.Println()
+		for _, card := range player.Cards {
+			fmt.Printf("|       %-2s| ", card.Rank)
+		}
+		fmt.Println()
+		for _ = range player.Cards {
+			fmt.Print(" ---------  ")
+		}
+		fmt.Println()
 	}
 }
 
 func getHandval(hand Hand) (handval int) {
-	for _, card := range hand.cards {
-		handval += card.value
+	for _, card := range hand.Cards {
+		if card.Value >= 10 {
+			handval += 10
+		} else {
+			handval += card.Value
+		}
 	}
 	return handval
 }
 
-func checkDuplicate(card Card, valuestore []int) bool {
+func checkDuplicate(card Card) bool {
 	for i := 0; i < len(valuestore); i++ {
-		if card.cardval == valuestore[i] {
+		if card.Cardval == valuestore[i] {
 			return false
 		}
 	}
 	return true
 }
 
-func createCard(valuestore []int) (Card, []int) {
-	//GENERATE 4 DIFFERENT CARDS.
+func createCard() Card {
+	//GENERATE 4 DIFFERENT Cards.
 	var card Card
 	suitval := randRange(1, len(suits))
 	rankval := randRange(1, len(ranks))
-	card.cardval = rankval + suitval
-	card.name = ranks[rankval] + " of " + suits[suitval]
-	card.value = rankval
-	if checkDuplicate(card, valuestore) == false {
-		return createCard(valuestore)
+	card.Cardval = rankval + suitval
+	card.Rank = ranks[rankval]
+	card.Suit = suits[suitval]
+	card.Name = ranks[rankval] + " of " + suits[suitval]
+	card.Value = rankval
+	if !checkDuplicate(card) {
+		return createCard()
 	}
 
-	valuestore = append(valuestore, card.cardval)
-	return card, valuestore
+	valuestore = append(valuestore, card.Cardval)
+	return card
 }
 
-func deal(valuestore []int) (Hand, Hand, []int) {
+func deal() (Hand, Hand) {
 	var player Hand
 	var dealer Hand
-	//create cards that are different.
-	card1, valuestore := createCard(valuestore)
-	card2, valuestore := createCard(valuestore)
-	card3, valuestore := createCard(valuestore)
-	card4, valuestore := createCard(valuestore)
+	//create Cards that are different.
+	card1 := createCard()
+	card2 := createCard()
+	card3 := createCard()
+	card4 := createCard()
 
-	player.cards = append(player.cards, card1)
-	dealer.cards = append(dealer.cards, card2)
-	player.cards = append(player.cards, card3)
-	dealer.cards = append(dealer.cards, card4)
+	player.Cards = append(player.Cards, card1)
+	displayHands(player, dealer)
+	time.Sleep(2 * time.Second)
 
-	return player, dealer, valuestore
-}
+	dealer.Cards = append(dealer.Cards, card2)
+	displayHands(player, dealer)
+	time.Sleep(2 * time.Second)
 
-func hit() {
+	player.Cards = append(player.Cards, card3)
+	displayHands(player, dealer)
+	time.Sleep(2 * time.Second)
 
-}
+	dealer.Cards = append(dealer.Cards, card4)
+	displayHands(player, dealer)
+	time.Sleep(2 * time.Second)
 
-func stay() {
+	return player, dealer
 
 }
