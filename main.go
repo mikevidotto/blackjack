@@ -143,7 +143,7 @@ func round() {
 	//reveal the second card dealt to the dealer.
 
 	for !endgame && !standoff {
-		displayHands(player, dealer)
+		displayHands(player, dealer, 0)
 		fmt.Println("Hit(1) or Stand(2)?")
 		var input int
 		fmt.Scanln(&input)
@@ -170,61 +170,53 @@ func round() {
 		game.WonFlag = 0
 		for !endgame {
 			if one, two := getHandval2(dealer); one < 21 && two < 21 {
-				fmt.Println(one, two)
 				done, dtwo := getHandval2(dealer)
 				pone, ptwo := getHandval2(player)
 				if (done > pone && done > ptwo) || (dtwo > pone && dtwo > ptwo) {
 					endgame = true
-					fmt.Println("1Dealer wins.")
 					game.WonFlag = 2
 				}
 			} else if one, two := getHandval2(dealer); one > 21 && two > 21 {
-				fmt.Println(one, two)
 				endgame = true
-				fmt.Println("You win.")
 				game.WonFlag = 1
 			} else {
-				fmt.Println(one, two)
 				if one, two := getHandval2(dealer); one == 21 || two == 21 {
 					endgame = true
 					if one, two := getHandval2(player); one == 21 || two == 21 {
-						fmt.Println("Draw.")
 						game.WonFlag = 3
 					} else {
-						fmt.Println("Dealer wins.")
 						game.WonFlag = 2
 					}
 				}
 			}
-			if game.WonFlag != 0 {
-				displayHands(player, dealer)
-				time.Sleep(2 * time.Second)
-			} else {
-				card := createCard()
-				dealer.Cards = append(dealer.Cards, card)
-				displayHands(player, dealer)
-				time.Sleep(2 * time.Second)
-			}
 			switch game.WonFlag {
 			case 1:
+				displayHands(player, dealer, 1)
 				fmt.Println("You win!")
 			case 2:
+				displayHands(player, dealer, 2)
 				fmt.Println("Dealer wins.")
 			case 3:
+				displayHands(player, dealer, 3)
 				fmt.Println("Draw.")
+			case 0:
+				card := createCard()
+				dealer.Cards = append(dealer.Cards, card)
+				displayHands(player, dealer, 0)
+				time.Sleep(2 * time.Second)
+			default:
+				fmt.Println("Not sure how you got here....")
 			}
 		}
 	} else {
 		if one, two := getHandval2(player); one == 21 || two == 21 {
-			fmt.Println(one, two)
 			//check if dealer gets 21. otherwise, you win.
 			done, dtwo := getHandval2(dealer)
 			for done < 21 && dtwo < 21 {
-				fmt.Println(done, dtwo)
 				card := createCard()
 				dealer.Cards = append(dealer.Cards, card)
 				done, dtwo = getHandval2(dealer)
-				displayHands(player, dealer)
+				displayHands(player, dealer, 0)
 			}
 			dealerone, dealertwo := getHandval2(dealer)
 			fmt.Println("DEALER:", dealerone, dealertwo)
@@ -233,12 +225,12 @@ func round() {
 				fmt.Println("2Draw.")
 				game.WonFlag = 3
 			} else {
-				displayHands(player, dealer)
+				displayHands(player, dealer, 0)
 				fmt.Println("You win!")
 				game.WonFlag = 1
 			}
 		} else {
-			displayHands(player, dealer)
+			displayHands(player, dealer, 0)
 			fmt.Println("3Dealer wins")
 			game.WonFlag = 2
 		}
@@ -255,8 +247,8 @@ func round() {
 	//whoever is closer to 21 wins.
 }
 
-func displayHands(player Hand, dealer Hand) {
-	if len(dealer.Cards) < 3 {
+func displayHands(player Hand, dealer Hand, gamewonflag int) {
+	if len(dealer.Cards) < 3 && gamewonflag == 0 {
 		fmt.Println("\n\n\n\n\n\n\n\n     D E A L E R ")
 		for _ = range dealer.Cards {
 			fmt.Print(" ---------  ")
@@ -479,19 +471,19 @@ func deal() (Hand, Hand) {
 	card4 := createCard()
 
 	player.Cards = append(player.Cards, card1)
-	displayHands(player, dealer)
+	displayHands(player, dealer, 0)
 	time.Sleep(2 * time.Second)
 
 	dealer.Cards = append(dealer.Cards, card2)
-	displayHands(player, dealer)
+	displayHands(player, dealer, 0)
 	time.Sleep(2 * time.Second)
 
 	player.Cards = append(player.Cards, card3)
-	displayHands(player, dealer)
+	displayHands(player, dealer, 0)
 	time.Sleep(2 * time.Second)
 
 	dealer.Cards = append(dealer.Cards, card4)
-	displayHands(player, dealer)
+	displayHands(player, dealer, 0)
 	time.Sleep(2 * time.Second)
 
 	return player, dealer
