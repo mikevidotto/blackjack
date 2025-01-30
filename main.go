@@ -24,11 +24,10 @@ type Hand struct {
 }
 
 type Card struct {
-	Name    string
-	Suit    string
-	Rank    string
-	Value   int //SPLIT INTO RANK AND SUIT VALUES??? MODIFY createCard()???
-	Cardval int
+	Name  string
+	Suit  string
+	Rank  string
+	Value int //SPLIT INTO RANK AND SUIT VALUES??? MODIFY createCard()???
 }
 
 var (
@@ -48,14 +47,14 @@ var (
 		12: "Q",
 		13: "K",
 	}
-	valuestore []int
+	cardstore []Card
 )
 
 func main() {
 	play := false
 	for !play {
 		fmt.Println("\nPLAY (1)  QUIT(2)  SEE STATS(3)")
-		valuestore = []int{}
+		cardstore = []Card{}
 		var input int
 		fmt.Scanln(&input)
 
@@ -157,7 +156,7 @@ func round() {
 			fmt.Println("hit.")
 			card := createCard()
 			player.Cards = append(player.Cards, card)
-			if getHandval(player) >= 21 {
+			if one, two := getHandval2(player); one >= 21 || two >= 21 {
 				endgame = true
 			}
 		} else {
@@ -168,25 +167,27 @@ func round() {
 
 	if standoff {
 		//deal card to dealer unti he gets a higher cardval than player, or until he draws 21 or over.
+		game.WonFlag = 0
 		for !endgame {
-			card := createCard()
-			dealer.Cards = append(dealer.Cards, card)
-			displayHands(player, dealer)
-			time.Sleep(2 * time.Second)
-			if getHandval(dealer) < 21 {
-				if getHandval(dealer) > getHandval(player) {
+			if one, two := getHandval2(dealer); one < 21 && two < 21 {
+				fmt.Println(one, two)
+				done, dtwo := getHandval2(dealer)
+				pone, ptwo := getHandval2(player)
+				if (done > pone && done > ptwo) || (dtwo > pone && dtwo > ptwo) {
 					endgame = true
 					fmt.Println("1Dealer wins.")
 					game.WonFlag = 2
 				}
-			} else if getHandval(dealer) > 21 {
+			} else if one, two := getHandval2(dealer); one > 21 && two > 21 {
+				fmt.Println(one, two)
 				endgame = true
 				fmt.Println("You win.")
 				game.WonFlag = 1
 			} else {
-				if getHandval(dealer) == 21 {
+				fmt.Println(one, two)
+				if one, two := getHandval2(dealer); one == 21 || two == 21 {
 					endgame = true
-					if getHandval(player) == 21 {
+					if one, two := getHandval2(player); one == 21 || two == 21 {
 						fmt.Println("Draw.")
 						game.WonFlag = 3
 					} else {
@@ -195,16 +196,39 @@ func round() {
 					}
 				}
 			}
-		}
-	} else {
-		if getHandval(player) == 21 {
-			//check if dealer gets 21. otherwise, you win.
-			for getHandval(dealer) < 21 {
+			if game.WonFlag != 0 {
+				displayHands(player, dealer)
+				time.Sleep(2 * time.Second)
+			} else {
 				card := createCard()
 				dealer.Cards = append(dealer.Cards, card)
 				displayHands(player, dealer)
+				time.Sleep(2 * time.Second)
 			}
-			if getHandval(dealer) == 21 {
+			switch game.WonFlag {
+			case 1:
+				fmt.Println("You win!")
+			case 2:
+				fmt.Println("Dealer wins.")
+			case 3:
+				fmt.Println("Draw.")
+			}
+		}
+	} else {
+		if one, two := getHandval2(player); one == 21 || two == 21 {
+			fmt.Println(one, two)
+			//check if dealer gets 21. otherwise, you win.
+			done, dtwo := getHandval2(dealer)
+			for done < 21 && dtwo < 21 {
+				fmt.Println(done, dtwo)
+				card := createCard()
+				dealer.Cards = append(dealer.Cards, card)
+				done, dtwo = getHandval2(dealer)
+				displayHands(player, dealer)
+			}
+			dealerone, dealertwo := getHandval2(dealer)
+			fmt.Println("DEALER:", dealerone, dealertwo)
+			if dealerone == 21 || dealertwo == 21 {
 				//tie.
 				fmt.Println("2Draw.")
 				game.WonFlag = 3
@@ -377,21 +401,45 @@ func getHandval(hand Hand) (handval int) {
 	return handval
 }
 
+func getHandval2(hand Hand) (handval int, handval2 int) {
+	aces := 0
+	for _, card := range hand.Cards {
+		if card.Value == 1 {
+			//ace
+			if aces >= 1 {
+				//two aces
+				handval += 1
+				handval2 += 1
+			} else {
+				handval += 1
+				handval2 += 11
+				aces += 1
+			}
+		} else if card.Value >= 10 {
+			handval += 10
+			handval2 += 10
+		} else {
+			handval += card.Value
+			handval2 += card.Value
+		}
+	}
+	return handval, handval2
+}
+
 func checkDuplicate(card Card) bool {
-	for i := 0; i < len(valuestore); i++ {
-		if card.Cardval == valuestore[i] {
+	for i := 0; i < len(cardstore); i++ {
+		if card.Rank == cardstore[i].Rank && card.Suit == cardstore[i].Suit {
 			return false
 		}
 	}
 	return true
 }
 
-func createCard() Card {
+func createCustomCard(suit int, rank int) Card {
 	//GENERATE 4 DIFFERENT Cards.
 	var card Card
-	suitval := randRange(1, len(suits))
-	rankval := randRange(1, len(ranks))
-	card.Cardval = rankval + suitval
+	suitval := suit
+	rankval := rank
 	card.Rank = ranks[rankval]
 	card.Suit = suits[suitval]
 	card.Name = ranks[rankval] + " of " + suits[suitval]
@@ -400,7 +448,24 @@ func createCard() Card {
 		return createCard()
 	}
 
-	valuestore = append(valuestore, card.Cardval)
+	cardstore = append(cardstore, card)
+	return card
+}
+
+func createCard() Card {
+	//GENERATE 4 DIFFERENT Cards.
+	var card Card
+	suitval := randRange(1, len(suits))
+	rankval := randRange(1, len(ranks))
+	card.Rank = ranks[rankval]
+	card.Suit = suits[suitval]
+	card.Name = ranks[rankval] + " of " + suits[suitval]
+	card.Value = rankval
+	if !checkDuplicate(card) {
+		return createCard()
+	}
+
+	cardstore = append(cardstore, card)
 	return card
 }
 
